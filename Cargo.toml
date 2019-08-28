@@ -1,0 +1,13 @@
+[package]
+name = "merch"
+version = "0.1.0"
+authors = ["Henning Dieterichs <henning.dieterichs@live.de>"]
+edition = "2018"
+
+[dependencies]
+structopt = "0.2"
+glob = "0.2.11"
+pathdiff = "0.1.0"
+blake2 = "0.8.0"
+hex = "0.3.2"
+regex = "1.1.0"

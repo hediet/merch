@@ -34,14 +34,6 @@ pub enum CliCommand {
     Split {
         #[structopt(short = "m", long = "merch-file", parse(from_os_str))]
         file: PathBuf,
-
-        #[structopt(
-            short = "c",
-            long = "comment-style",
-            parse(from_os_str),
-            default_value = "// {}"
-        )]
-        comment_style: OsString,
     },
 }
 
@@ -69,18 +61,9 @@ fn main() {
             merge_files::merge_files(files, &mut out, &formatter).unwrap();
         }
 
-        CliCommand::Split {
-            file,
-            comment_style,
-        } => {
-            let comment_style = comment_style.to_str().unwrap();
-            let parts: Vec<_> = comment_style.split("{}").collect();
-
-            let formatter = LineFormatter {
-                prefix: parts[0].to_owned(),
-                suffix: parts[1].to_owned(),
-            };
-            split_file::split_file(file, &formatter).unwrap();
+        CliCommand::Split { file } => {
+            let mut file = File::open(file).unwrap();
+            split_file::split_file(&mut file).unwrap();
         }
     }
 }

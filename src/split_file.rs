@@ -1,7 +1,6 @@
-use super::{compute_hash, LineFormatter};
-use regex::Regex;
+use super::compute_hash;
+use regex::{Regex, RegexBuilder};
 use std::collections::{BTreeMap, HashMap, HashSet};
-use std::fs::File;
 use std::io::prelude::*;
 use std::io::Error;
 use std::path::PathBuf;
@@ -20,16 +19,14 @@ struct UpdatedFileInfo<'t> {
     content: Option<&'t str>,
 }
 
-pub fn split_file(merch_file: PathBuf, formatter: &LineFormatter) -> Result<(), Error> {
-    let mut file = File::open(merch_file).unwrap();
+pub fn split_file<R: Read>(input: &mut R) -> Result<(), Error> {
     let mut content = String::new();
-    file.read_to_string(&mut content)?;
+    input.read_to_string(&mut content)?;
 
-    let merch_instruction_regex = regex::escape(&formatter.prefix)
-        + "merch::(?P<instruction>.*)"
-        + &regex::escape(&formatter.suffix)
-        + "\r?\n";
-    let merch_instruction_regex = Regex::new(&merch_instruction_regex).unwrap();
+    let merch_instruction_regex = RegexBuilder::new(r"^.*? merch::(?P<instruction>.*).*?\r?\n")
+        .multi_line(true)
+        .build()
+        .unwrap();
 
     let instruction_regex =
         Regex::new(&"(?P<command>[a-zA-Z0-9-]+):\\s*(?P<args>(<.*?>\\s*)*)").unwrap();

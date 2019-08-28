@@ -58,7 +58,8 @@ fn main() {
                 prefix: parts[0].to_owned(),
                 suffix: parts[1].to_owned(),
             };
-            merge_files::merge_files(files, &mut out, &formatter).unwrap();
+            let current_dir = std::fs::canonicalize(std::env::current_dir().unwrap()).unwrap();
+            merge_files::merge_files(files, &mut out, &formatter, current_dir).unwrap();
         }
 
         CliCommand::Split { file } => {

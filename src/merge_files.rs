@@ -11,16 +11,16 @@ pub fn merge_files<W: Write>(
     files: Vec<PathBuf>,
     out: &mut W,
     formatter: &LineFormatter,
+    base_dir: PathBuf,
 ) -> Result<(), Error> {
     let mut paths = Vec::new();
-    let current_dir = std::fs::canonicalize(std::env::current_dir().unwrap()).unwrap();
 
     for file in files {
         for entry in glob(file.to_str().unwrap()).unwrap() {
             match entry {
                 Ok(path) => {
                     let path =
-                        diff_paths(&std::fs::canonicalize(path).unwrap(), &current_dir).unwrap();
+                        diff_paths(&std::fs::canonicalize(path).unwrap(), &base_dir).unwrap();
 
                     paths.push(path.clone());
                 }
@@ -30,7 +30,7 @@ pub fn merge_files<W: Write>(
     }
 
     formatter.writeln(out, "=".repeat(20))?;
-    formatter.writeln(out, format!("merch::setup: <{}>", current_dir.display()))?;
+    formatter.writeln(out, format!("merch::setup: <{}>", base_dir.display()))?;
 
     for (idx, path) in paths.iter().enumerate() {
         let mut file = File::open(path)?;

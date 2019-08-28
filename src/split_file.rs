@@ -1,9 +1,103 @@
 use super::compute_hash;
 use regex::{Regex, RegexBuilder};
 use std::collections::{BTreeMap, HashMap, HashSet};
+use std::ffi::OsString;
+use std::fmt;
 use std::io::prelude::*;
 use std::io::Error;
 use std::path::PathBuf;
+
+enum Action<'content> {
+    Write(PathBuf, &'content str),
+    Rename(PathBuf, PathBuf),
+    Delete(PathBuf),
+}
+
+impl Action<'_> {
+    fn perform(&self) -> Result<(), Error> {
+        match self {
+            Action::Write(path, content) => std::fs::write(path, content),
+            Action::Rename(old, new) => std::fs::rename(old, new),
+            Action::Delete(path) => std::fs::remove_file(path),
+        }
+    }
+}
+
+impl<'t> fmt::Display for Action<'t> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Action::Write(path, content) => write!(f, "Write \"{}\": {}", path.display(), content),
+            Action::Rename(old, new) => {
+                write!(f, "Rename \"{}\" to \"{}\"", old.display(), new.display())
+            }
+            Action::Delete(path) => write!(f, "Delete \"{}\"", path.display()),
+        }
+    }
+}
+
+pub fn split_file<R: Read>(input: &mut R) -> Result<(), Error> {
+    let mut content = String::new();
+    input.read_to_string(&mut content)?;
+
+    let mut renames = BTreeMap::<PathBuf, PathBuf>::new();
+
+    let Doc {
+        existing_files,
+        updated_files,
+    } = parse(&content);
+
+    let mut actions = Vec::<Action>::new();
+
+    // Write and Delete
+    for existing_file_info in &existing_files {
+        let old_path = &existing_file_info.path;
+        let hash = &existing_file_info.hash;
+
+        if let Some(file_info) = updated_files.get(&existing_file_info.idx) {
+            let new_path = &file_info.new_path;
+            if old_path != new_path {
+                renames.insert(old_path.clone(), new_path.clone());
+            }
+
+            if let Some(content) = file_info.content {
+                if hash != &compute_hash(&mut content.as_bytes()).unwrap() {
+                    actions.push(Action::Write(old_path.clone(), content));
+                }
+            }
+        } else {
+            actions.push(Action::Delete(old_path.clone()));
+        }
+    }
+
+    loop {
+        let v = match renames.keys().next() {
+            Some(v) => v,
+            None => break,
+        };
+
+        process_rename(
+            v.clone(),
+            &mut Context {
+                renames: &mut renames,
+                processed: &mut HashSet::new(),
+                actions: &mut actions,
+            },
+        );
+    }
+
+    for action in actions {
+        println!("{}", action);
+        action.perform().unwrap();
+    }
+
+    Ok(())
+}
+
+#[derive(Debug)]
+struct Doc<'t> {
+    existing_files: Vec<ExistingFileInfo>,
+    updated_files: HashMap<usize, UpdatedFileInfo<'t>>,
+}
 
 #[derive(Debug)]
 struct ExistingFileInfo {
@@ -19,10 +113,7 @@ struct UpdatedFileInfo<'t> {
     content: Option<&'t str>,
 }
 
-pub fn split_file<R: Read>(input: &mut R) -> Result<(), Error> {
-    let mut content = String::new();
-    input.read_to_string(&mut content)?;
-
+fn parse<'t>(content: &'t str) -> Doc<'t> {
     let merch_instruction_regex = RegexBuilder::new(r"^.*? merch::(?P<instruction>.*).*?\r?\n")
         .multi_line(true)
         .build()
@@ -104,68 +195,38 @@ pub fn split_file<R: Read>(input: &mut R) -> Result<(), Error> {
         }
     }
 
-    let mut renames = BTreeMap::<PathBuf, PathBuf>::new();
-
-    // Write and Delete
-    for existing_file_info in &existing_files {
-        let old_path = &existing_file_info.path;
-        let hash = &existing_file_info.hash;
-
-        if let Some(file_info) = updated_files.get(&existing_file_info.idx) {
-            let new_path = &file_info.new_path;
-            if old_path != new_path {
-                //println!("Rename {} to {}", old_path.display(), new_path.display());
-                renames.insert(old_path.clone(), new_path.clone());
-            }
-
-            if let Some(content) = file_info.content {
-                if hash != &compute_hash(&mut content.as_bytes()).unwrap() {
-                    println!("Write {:?} to {}", content, old_path.display());
-                }
-            }
-        } else {
-            println!("Delete {}", old_path.display());
-        }
+    Doc {
+        existing_files,
+        updated_files,
     }
-
-    loop {
-        let v = match renames.keys().next() {
-            Some(v) => v,
-            None => break,
-        };
-
-        process_rename(
-            v.clone(),
-            &mut Context {
-                renames: &mut renames,
-                processed: &mut HashSet::new(),
-            },
-        );
-    }
-
-    Ok(())
 }
 
-struct Context<'t> {
+struct Context<'t, 'actions, 'content> {
     renames: &'t mut BTreeMap<PathBuf, PathBuf>,
     processed: &'t mut HashSet<PathBuf>,
+    actions: &'actions mut Vec<Action<'content>>,
 }
 
-use std::str::FromStr;
-
-fn process_rename<'t>(from: PathBuf, context: &mut Context<'t>) {
+fn process_rename<'t, 'actions, 'content>(
+    from: PathBuf,
+    context: &mut Context<'t, 'actions, 'content>,
+) {
     match context.renames.get(&from) {
         None => {}
         Some(to) => {
             context.processed.insert(from.clone());
             if context.processed.contains(to) {
-                let tmp = PathBuf::from_str(&"temp").unwrap();
-                println!("Rename from {:?} to {:?}", from, tmp);
-                context.renames.insert(tmp, to.clone());
+                let mut tmp = to.clone();
+                let mut file_name = OsString::new();
+                file_name.push(tmp.file_name().unwrap());
+                file_name.push("_temp");
+                tmp.set_file_name(file_name);
+                context.renames.insert(tmp.clone(), to.clone());
+                context.actions.push(Action::Rename(from.clone(), tmp));
             } else {
                 let to = to.clone();
                 process_rename(to.clone(), context);
-                println!("Rename from {:?} to {:?}", from, to);
+                context.actions.push(Action::Rename(from.clone(), to));
             }
             context.renames.remove(&from);
         }

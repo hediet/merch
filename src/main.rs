@@ -1,7 +1,8 @@
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{stdout, Write};
+use std::io::{prelude::*, stdin, stdout, BufReader, Write};
 use std::path::PathBuf;
+use std::str::FromStr;
 use structopt::StructOpt;
 
 mod merge_files;
@@ -17,6 +18,9 @@ pub enum CliCommand {
     Merge {
         #[structopt(parse(from_os_str))]
         files: Vec<PathBuf>,
+
+        #[structopt(short = "i", long = "input-file", parse(from_os_str))]
+        input: Option<PathBuf>,
 
         #[structopt(short = "m", long = "merch-file", parse(from_os_str))]
         out: Option<PathBuf>,
@@ -42,8 +46,9 @@ fn main() {
 
     match cmd {
         CliCommand::Merge {
-            files,
+            mut files,
             out,
+            input,
             comment_style,
         } => {
             let comment_style = comment_style.to_str().unwrap();
@@ -53,6 +58,19 @@ fn main() {
                 Some(path_buf) => Box::new(File::create(path_buf).unwrap()),
                 None => Box::new(stdout()),
             };
+
+            if let Some(input) = input {
+                let input: Box<dyn Read> = if input.to_str().unwrap() == "-" {
+                    Box::new(stdin())
+                } else {
+                    Box::new(File::open(input).unwrap())
+                };
+
+                let reader = BufReader::new(input);
+                for line in reader.lines() {
+                    files.push(PathBuf::from_str(&line.unwrap()).unwrap());
+                }
+            }
 
             let formatter = LineFormatter {
                 prefix: parts[0].to_owned(),

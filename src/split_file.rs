@@ -44,17 +44,19 @@ pub fn split_file<R: Read>(input: &mut R) -> Result<(), Error> {
     let Doc {
         existing_files,
         updated_files,
+        base_path,
     } = parse(&content);
 
     let mut actions = Vec::<Action>::new();
 
     // Write and Delete
     for existing_file_info in &existing_files {
-        let old_path = &existing_file_info.path;
+        let old_path = base_path.join(&existing_file_info.path);
+
         let hash = &existing_file_info.hash;
 
         if let Some(file_info) = updated_files.get(&existing_file_info.idx) {
-            let new_path = &file_info.new_path;
+            let new_path = base_path.join(&file_info.new_path);
             if old_path != new_path {
                 renames.insert(old_path.clone(), new_path.clone());
             }
@@ -97,6 +99,7 @@ pub fn split_file<R: Read>(input: &mut R) -> Result<(), Error> {
 struct Doc<'t> {
     existing_files: Vec<ExistingFileInfo>,
     updated_files: HashMap<usize, UpdatedFileInfo<'t>>,
+    base_path: PathBuf,
 }
 
 #[derive(Debug)]
@@ -113,6 +116,8 @@ struct UpdatedFileInfo<'t> {
     content: Option<&'t str>,
 }
 
+use std::str::FromStr;
+
 fn parse<'t>(content: &'t str) -> Doc<'t> {
     let merch_instruction_regex = RegexBuilder::new(r"^.*? merch::(?P<instruction>.*).*?\r?\n")
         .multi_line(true)
@@ -125,6 +130,7 @@ fn parse<'t>(content: &'t str) -> Doc<'t> {
 
     let mut existing_files: Vec<ExistingFileInfo> = Vec::new();
     let mut updated_files: HashMap<usize, UpdatedFileInfo> = HashMap::new();
+    let mut base_path: Option<PathBuf> = None;
 
     let mut last_file_idx = None;
     let mut last_full_match: Option<regex::Match> = None;
@@ -169,6 +175,9 @@ fn parse<'t>(content: &'t str) -> Doc<'t> {
 
             last_file_idx = None;
             match command {
+                "setup" => {
+                    base_path = Some(PathBuf::from_str(args[0]).unwrap());
+                }
                 "existing-file" => {
                     let idx: usize = args[0].parse().unwrap();
                     let path: PathBuf = args[1].parse().unwrap();
@@ -198,6 +207,7 @@ fn parse<'t>(content: &'t str) -> Doc<'t> {
     Doc {
         existing_files,
         updated_files,
+        base_path: base_path.unwrap(),
     }
 }
 

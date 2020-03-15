@@ -32,12 +32,17 @@ pub enum CliCommand {
             default_value = "// {}"
         )]
         comment_style: OsString,
+
+        #[structopt(short = "-w", long = "without-content")]
+        without_content: bool,
     },
 
     #[structopt(name = "split")]
     Split {
         #[structopt(short = "m", long = "merch-file", parse(from_os_str))]
         file: PathBuf,
+        #[structopt(short = "d", long = "dry")]
+        dry: bool,
     },
 }
 
@@ -50,6 +55,7 @@ fn main() {
             out,
             input,
             comment_style,
+            without_content,
         } => {
             let comment_style = comment_style.to_str().unwrap();
             let parts: Vec<_> = comment_style.split("{}").collect();
@@ -77,12 +83,13 @@ fn main() {
                 suffix: parts[1].to_owned(),
             };
             let current_dir = std::fs::canonicalize(std::env::current_dir().unwrap()).unwrap();
-            merge_files::merge_files(files, &mut out, &formatter, current_dir).unwrap();
+            merge_files::merge_files(files, &mut out, &formatter, current_dir, without_content)
+                .unwrap();
         }
 
-        CliCommand::Split { file } => {
+        CliCommand::Split { file, dry } => {
             let mut file = File::open(file).unwrap();
-            split_file::split_file(&mut file).unwrap();
+            split_file::split_file(&mut file, dry).unwrap();
         }
     }
 }

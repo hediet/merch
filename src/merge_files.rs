@@ -12,6 +12,7 @@ pub fn merge_files<W: Write>(
     out: &mut W,
     formatter: &LineFormatter,
     base_dir: PathBuf,
+    without_content: bool,
 ) -> Result<(), Error> {
     let mut paths = Vec::new();
 
@@ -50,12 +51,19 @@ pub fn merge_files<W: Write>(
     writeln!(out)?;
 
     for (idx, path) in paths.iter().enumerate() {
-        formatter.writeln(out, format!("merch::file: <{}> <{}>:", idx, path.display()))?;
+        let colon = if without_content { &"" } else { &":" };
 
-        let f = File::open(path)?;
-        let mut file = BufReader::new(&f);
-        copy(&mut file, out)?;
-        writeln!(out)?;
+        formatter.writeln(
+            out,
+            format!("merch::file: <{}> <{}>{}", idx, path.display(), colon),
+        )?;
+
+        if !without_content {
+            let f = File::open(path)?;
+            let mut file = BufReader::new(&f);
+            copy(&mut file, out)?;
+            writeln!(out)?;
+        }
     }
 
     Ok(())

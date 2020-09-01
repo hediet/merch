@@ -12,7 +12,10 @@ impl Action<'_> {
     pub fn run(&self) -> Result<(), Error> {
         match self {
             Action::Write(path, content) => std::fs::write(path, content),
-            Action::Rename(old, new) => std::fs::rename(old, new),
+            Action::Rename(old, new) => {
+                std::fs::create_dir_all(new.parent().expect("File must have a parent directory"))?;
+                std::fs::rename(old, new)
+            }
             Action::Delete(path) => std::fs::remove_file(path),
         }
     }

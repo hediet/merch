@@ -1,6 +1,4 @@
 use super::{compute_hash, LineFormatter};
-use glob::glob;
-use pathdiff::diff_paths;
 use std::fs::File;
 use std::io::BufReader;
 use std::io::Error;
@@ -14,34 +12,20 @@ pub fn merge_files<W: Write>(
     base_dir: PathBuf,
     without_content: bool,
 ) -> Result<(), Error> {
-    let mut paths = Vec::new();
-
-    for file in files {
-        for entry in glob(file.to_str().unwrap()).unwrap() {
-            match entry {
-                Ok(path) => {
-                    let path =
-                        diff_paths(&std::fs::canonicalize(path).unwrap(), &base_dir).unwrap();
-
-                    paths.push(path.clone());
-                }
-                Err(e) => println!("{:?}", e),
-            }
-        }
-    }
-
     formatter.writeln(out, "=".repeat(20))?;
     formatter.writeln(out, format!("merch::setup: <{}>", base_dir.display()))?;
-
-    for (idx, path) in paths.iter().enumerate() {
+    for (idx, path) in files.iter().enumerate() {
+        if !path.is_file() {
+            continue;
+        }
         let mut file = File::open(path)?;
         let hash = compute_hash(&mut file)?;
         formatter.writeln(
             out,
             format!(
                 "merch::existing-file: <{}> <{}> <{}>",
-                idx,
                 path.display(),
+                idx,
                 hash
             ),
         )?;
@@ -50,12 +34,15 @@ pub fn merge_files<W: Write>(
     formatter.writeln(out, "=".repeat(20))?;
     writeln!(out)?;
 
-    for (idx, path) in paths.iter().enumerate() {
+    for (idx, path) in files.iter().enumerate() {
+        if !path.is_file() {
+            continue;
+        }
         let colon = if without_content { &"" } else { &":" };
 
         formatter.writeln(
             out,
-            format!("merch::file: <{}> <{}>{}", idx, path.display(), colon),
+            format!("merch::file: <{}> <{}>{}", path.display(), idx, colon),
         )?;
 
         if !without_content {

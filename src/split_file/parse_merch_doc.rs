@@ -76,15 +76,15 @@ pub fn parse_merch_doc<'t>(content: &'t str) -> ParsedMerchDoc<'t> {
                     base_path = Some(PathBuf::from_str(args[0]).unwrap());
                 }
                 "existing-file" => {
-                    let idx: usize = args[0].parse().unwrap();
-                    let path: PathBuf = args[1].parse().unwrap();
+                    let path: PathBuf = args[0].parse().unwrap();
+                    let idx: usize = args[1].parse().unwrap();
                     let hash = args[2].to_owned();
 
                     existing_files.push(ExistingFileInfo { idx, path, hash });
                 }
                 "file" => {
-                    let idx: usize = args[0].parse().unwrap();
-                    let new_path: PathBuf = args[1].parse().unwrap();
+                    let new_path: PathBuf = args[0].parse().unwrap();
+                    let idx: usize = args[1].parse().unwrap();
 
                     updated_files.insert(
                         idx,
